@@ -15,7 +15,8 @@ class AMRBARTDecoderWrapper(nn.Module):
         
         # Load Hugging Face AMRBART
         logger.info(f"Loading AMRBART model: {model_name}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer_name = "facebook/bart-large"
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(self.device)
         
         # Freezing the weights of BART to focus training on the graph encoder,
