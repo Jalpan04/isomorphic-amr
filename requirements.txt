@@ -16,6 +16,7 @@ geoopt>=0.5.0
 torch>=2.0.0
 torch-geometric>=2.4.0
 transformers>=4.30.0
+sentencepiece>=0.2.1
 sentence-transformers>=2.2.2
 scikit-learn>=1.2.0
 
