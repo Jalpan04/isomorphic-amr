@@ -76,11 +76,14 @@ def gromov_wasserstein_align(
         T, log_dict = ot.gromov.gromov_wasserstein(
             C_s, C_t, p, q,
             loss_fun=loss_fun,
-            log=log,
+            log=True,
             verbose=False
         )
         gw_loss = log_dict.get("gw_dist", float("nan"))
         logger.debug(f"GW alignment complete. loss: {gw_loss:.6f}")
+        # If the caller requested log=False, return an empty log dict
+        if not log:
+            log_dict = {}
     except Exception as e:
         logger.error(f"GW optimization failed: {e}")
         T = np.outer(p, q) # uniform fallback
@@ -141,11 +144,14 @@ def fused_gromov_wasserstein_align(
             M, C_s, C_t, p, q,
             loss_fun=loss_fun,
             alpha=alpha,
-            log=log,
+            log=True,
             verbose=False
         )
         fgw_loss = log_dict.get("fgw_dist", float("nan"))
         logger.debug(f"FGW alignment complete. loss: {fgw_loss:.6f}")
+        # If the caller requested log=False, return an empty log dict
+        if not log:
+            log_dict = {}
     except Exception as e:
         logger.error(f"FGW optimization failed: {e}")
         T = np.outer(p, q) # uniform fallback
