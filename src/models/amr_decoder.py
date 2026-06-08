@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import BartTokenizer, AutoModelForSeq2SeqLM
 from transformers.modeling_outputs import BaseModelOutput
 from loguru import logger
 
 class AMRBARTDecoderWrapper(nn.Module):
-    def __init__(self, model_name: str = "xfbai/AMRBART-large-finetuned-AMR3.0-AMRParsing", gat_out_channels: int = 256):
+    def __init__(self, model_name: str = "xfbai/AMRBART-large-finetuned-AMR3.0-AMRParsing-v2", gat_out_channels: int = 256, projection_checkpoint: str = None):
         """
         Wrapper around the pretrained AMRBART sequence-to-sequence model
         to support decoding directly from projected graph embeddings.
@@ -13,11 +13,23 @@ class AMRBARTDecoderWrapper(nn.Module):
         super().__init__()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        # Load Hugging Face AMRBART
-        logger.info(f"Loading AMRBART model: {model_name}...")
-        tokenizer_name = "facebook/bart-large"
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(self.device)
+        # Load Hugging Face AMRBART v2 model and tokenizer
+        v2_name = "xfbai/AMRBART-large-finetuned-AMR3.0-AMRParsing-v2"
+        local_dir = "data/raw/amrbart_v2"
+        
+        import os
+        from pathlib import Path
+        if Path(local_dir).exists() and (Path(local_dir) / "pytorch_model.bin").exists():
+            model_load_path = local_dir
+            logger.info(f"Loading AMRBART v2 model and BartTokenizer from local cache: {local_dir}")
+        else:
+            model_load_path = v2_name
+            logger.info(f"Loading AMRBART v2 model and BartTokenizer from Hugging Face: {v2_name}")
+            
+        self.tokenizer = BartTokenizer.from_pretrained(model_load_path)
+        import regex as re
+        self.tokenizer.pat = re.compile(r""" ?<[a-z]+:?\d*>| ?:[^\s]+|'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_load_path).to(self.device)
         
         # Freezing the weights of BART to focus training on the graph encoder,
         # or keeping it fine-tuneable depending on resource availability.
@@ -29,6 +41,16 @@ class AMRBARTDecoderWrapper(nn.Module):
         self.bart_hidden_dim = self.model.config.d_model  # 1024 for BART-large
         self.emb_projection = nn.Linear(gat_out_channels, self.bart_hidden_dim).to(self.device)
         logger.info(f"BART hidden dim: {self.bart_hidden_dim}. Created projection from {gat_out_channels} to {self.bart_hidden_dim}.")
+        
+        if projection_checkpoint:
+            proj_path = Path(projection_checkpoint)
+            if proj_path.exists():
+                state_dict = torch.load(proj_path, map_location=self.device, weights_only=True)
+                self.emb_projection.load_state_dict(state_dict)
+                logger.success(f"Loaded trained projection weights from {projection_checkpoint}")
+            else:
+                logger.warning(f"Projection checkpoint not found at: {projection_checkpoint}")
+
 
     def generate_amr(self, projected_emb: torch.Tensor, max_length: int = 256, num_beams: int = 5) -> list[str]:
         """
@@ -46,8 +68,13 @@ class AMRBARTDecoderWrapper(nn.Module):
         
         with torch.no_grad():
             # 1. Project embedding to BART's input dimension
-            # (batch_size, seq_len, 256) -> (batch_size, seq_len, 1024)
-            bart_inputs = self.emb_projection(projected_emb.to(self.device))
+            # Ensure the input tensor matches the projection layer's device and dtype
+            proj_input = projected_emb.to(device=self.device, dtype=self.emb_projection.weight.dtype)
+            bart_inputs = self.emb_projection(proj_input)
+            
+            # Ensure projected inputs match the decoder model's dtype
+            model_dtype = next(self.model.parameters()).dtype
+            bart_inputs = bart_inputs.to(dtype=model_dtype)
             
             # 2. Package into BaseModelOutput as expected by Hugging Face generate
             encoder_outputs = BaseModelOutput(last_hidden_state=bart_inputs)
