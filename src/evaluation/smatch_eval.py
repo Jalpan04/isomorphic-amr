@@ -24,12 +24,14 @@ def run_smatch_cli(pred_file: str, gold_file: str, restarts: int = 4) -> dict:
         logger.error(f"Gold AMR file not found: {gold_file}")
         return {"precision": 0.0, "recall": 0.0, "f1": 0.0}
 
+    import sys
     # Execute Smatch CLI via subprocess using Python module call
     cmd = [
-        "python", "-m", "smatch",
-        "--f", str(pred_path),
+        sys.executable, "-X", "utf8", "-m", "smatch",
+        "-f", str(pred_path),
         str(gold_path),
-        "-r", str(restarts)
+        "-r", str(restarts),
+        "--pr"
     ]
     
     try:
