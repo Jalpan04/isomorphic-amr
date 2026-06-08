@@ -8,6 +8,27 @@ import sys
 import argparse
 from pathlib import Path
 
+# Check CUDA availability and Python version compatibility
+try:
+    import torch
+    if not torch.cuda.is_available():
+        print("=" * 80)
+        print("WARNING: CUDA (GPU) is NOT available in this Python environment!")
+        print("Please run the script using the parent virtual environment's interpreter:")
+        print(r'  & "d:\python projects\.venv\Scripts\python.exe" scripts/09_run_ablations.py')
+        print("=" * 80)
+    else:
+        print("CUDA (GPU) is available! All steps will run on GPU.")
+except ImportError:
+    print("WARNING: torch is not installed in the current environment.")
+
+if sys.version_info >= (3, 14):
+    print("=" * 80)
+    print(f"WARNING: You are running Python {sys.version_block if hasattr(sys, 'version_block') else sys.version}. Python >= 3.14 has known compatibility issues with third-party libraries (e.g. pathlib errors in transformers/torch_geometric).")
+    print("Please use the parent virtual environment's interpreter which runs a stable Python version with CUDA support:")
+    print(r'  & "d:\python projects\.venv\Scripts\python.exe" scripts/09_run_ablations.py')
+    print("=" * 80)
+
 print("Setting up logging...")
 from loguru import logger
 
