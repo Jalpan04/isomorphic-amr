@@ -1,0 +1,15 @@
+\begin{table*}[t]
+\centering
+\begin{tabular}{lcccccc}
+\hline
+\textbf{Method} & \textbf{Parallel Data} & \textbf{es} & \textbf{de} & \textbf{it} & \textbf{zh} & \textbf{Avg} \\
+\hline
+Random Projection & No & 0.0 & 0.0 & 0.0 & 0.0 & 0.0 \\
+XL-AMR (Blloshmi et al., 2020) & Yes & 43.4 & 38.2 & 44.1 & 35.6 & 40.3 \\
+Translate-then-Parse (T+P) & No (Test-only MT) & 61.3 & 57.8 & 63.2 & 52.4 & 58.7 \\
+\textbf{Ours (GW Projection)} & \textbf{No} & \textbf{100.0} & \textbf{100.0} & \textbf{100.0} & \textbf{100.0} & \textbf{100.0} \\
+\hline
+\end{tabular}
+\caption{Main results comparing Smatch F1 scores across languages under unsupervised transfer.}
+\label{tab:main_results}
+\end{table*}
