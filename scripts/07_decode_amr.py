@@ -16,6 +16,22 @@ from src.utils.logger import setup_logger
 from loguru import logger
 print("All libraries loaded successfully. Starting execution...")
 
+def validate_and_format_amr(amr_str: str) -> str:
+    """
+    Validates the generated AMR string. If valid Penman format, returns it as
+    a single-line representation. Otherwise, falls back to a dummy empty AMR.
+    """
+    import penman
+    clean_str = amr_str.strip()
+    try:
+        g = penman.decode(clean_str)
+        one_line = penman.encode(g).replace("\n", " ").strip()
+        if one_line.startswith("(") and one_line.endswith(")"):
+            return one_line
+    except Exception:
+        pass
+    return "(a / amr-empty)"
+
 def main():
     config_path = Path("config/base_config.yaml")
     with open(config_path, "r") as f:
@@ -27,12 +43,15 @@ def main():
     
     device = "cuda" if torch.cuda.is_available() and config["experiment"]["device"] == "cuda" else "cpu"
     
+    proj_ckpt = Path("experiments") / exp_id / "checkpoints" / "projection.pt"
+    proj_ckpt_str = str(proj_ckpt) if proj_ckpt.exists() else None
+
     # 1. Initialize Decoder Wrapper
-    # Default to loading AMRBART from Hugging Face
     try:
         decoder = AMRBARTDecoderWrapper(
-            model_name="xfbai/AMRBART-large-finetuned-AMR3.0-AMRParsing",
-            gat_out_channels=config["encoder"].get("out_channels", 256)
+            model_name="xfbai/AMRBART-large-finetuned-AMR3.0-AMRParsing-v2",
+            gat_out_channels=config["encoder"].get("out_channels", 256),
+            projection_checkpoint=proj_ckpt_str
         )
     except Exception as e:
         logger.critical(f"Failed to initialize AMRBART decoder: {e}")
@@ -60,14 +79,15 @@ def main():
             try:
                 # Generate AMR string
                 outputs = decoder.generate_amr(emb_batch, max_length=256, num_beams=5)
-                # Save first generation
+                # Save validated generation
                 if outputs:
-                    predicted_amrs.append(outputs[0])
+                    validated_amr = validate_and_format_amr(outputs[0])
+                    predicted_amrs.append(validated_amr)
                 else:
-                    predicted_amrs.append("# ::empty\n(a / amr-empty)")
+                    predicted_amrs.append("(a / amr-empty)")
             except Exception as e:
                 logger.error(f"Error decoding graph {i}: {e}")
-                predicted_amrs.append("# ::error\n(e / amr-error)")
+                predicted_amrs.append("(e / amr-error)")
                 
         # Save results to predicted.amr file
         out_file = Path("experiments") / exp_id / "predictions" / f"{lang}_predicted.amr"

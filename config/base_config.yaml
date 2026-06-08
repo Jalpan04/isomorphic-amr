@@ -1,54 +1,52 @@
-# Hyperparameter and Path Configurations for Unsupervised Cross-Lingual Semantic Parsing
-
-# General active run configuration
-experiment:
-  id: "exp_001_baseline_gw"
-  seed: 42
-  device: "cuda" # cuda or cpu
-  wandb_offline: true
-
-# Dataset Paths (Relative to workspace root)
-paths:
-  raw_amr: "data/raw/amr3"
-  multilingual_amr: "data/raw/multilingual_amr"
-  monolingual: "data/raw/monolingual"
-  processed_amr: "data/processed/amr_graphs_pyg"
-  processed_dep: "data/processed/dep_graphs_pyg"
-  relation_vocab: "data/processed/relation_vocab.json"
-  concept_vocab: "data/processed/concept_vocab.json"
-
-# Node embedding configuration
-embeddings:
-  model_name: "xlm-roberta-base"
-  dimension: 768
-
-# Shared Graph Attention Network (GAT) Encoder
-encoder:
-  in_channels: 768
-  hidden_channels: 256
-  out_channels: 256
-  heads: 4
-  dropout: 0.1
-  num_layers: 2
-
-# Fused Gromov-Wasserstein Alignment settings
 alignment:
-  metric: "cosine"     # cosine or euclidean
-  loss_fun: "square_loss" # square_loss or kl_loss
-  alpha: 0.5            # weight balance: 0 is node feature similarity only, 1 is graph topology only
-  regularization: 0.05  # entropic regularization for OT (if using entropic GW, otherwise standard)
-
-# Training Settings
+  alpha: 0.5
+  loss_fun: square_loss
+  method: procrustes
+  metric: cosine
+  regularization: 0.05
+embeddings:
+  dimension: 768
+  model_name: xlm-roberta-base
+encoder:
+  conv_type: gat
+  dropout: 0.1
+  heads: 4
+  hidden_channels: 256
+  in_channels: 768
+  num_layers: 2
+  out_channels: 256
+eval:
+  languages:
+  - es
+  - de
+  - it
+  - zh
+  smatch_restarts: 4
+experiment:
+  device: cuda
+  id: exp_002_procrustes
+  seed: 42
+  wandb_offline: true
+paths:
+  concept_vocab: data/processed/concept_vocab.json
+  monolingual: data/raw/monolingual
+  multilingual_amr: data/raw/multilingual_amr
+  processed_amr: data/processed/amr_graphs_pyg
+  processed_dep: data/processed/dep_graphs_pyg
+  raw_amr: data/raw/amr3
+  relation_vocab: data/processed/relation_vocab.json
+projection_train:
+  batch_size: 8
+  cache_size: 2400
+  epochs: 3
+  lr: 0.001
+  max_steps_per_epoch: 300
 train:
   batch_size: 32
+  cache_in_ram: true
   epochs: 10
-  lr: 0.0001
-  weight_decay: 0.01
-  warmup_steps: 100
-  reconstruction_weight: 1.0
   gw_weight: 1.0
-
-# Evaluation Settings
-eval:
-  languages: ["es", "de", "it", "zh"]
-  smatch_restarts: 4
+  lr: 0.0001
+  reconstruction_weight: 1.0
+  warmup_steps: 100
+  weight_decay: 0.01

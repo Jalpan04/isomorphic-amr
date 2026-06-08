@@ -99,8 +99,8 @@ def main():
             
         dep_dataset = GraphDataset(str(dep_dir))
         # We can align a subset (e.g. 100-300 graphs) for validation or the full set
-        limit = min(300, len(dep_dataset))
-        logger.info(f"Aligning the first {limit} graphs for {lang}")
+        limit = len(dep_dataset)
+        logger.info(f"Aligning all {limit} graphs for {lang}")
         
         projected_emb_list = []
         matched_en_indices = []

@@ -128,13 +128,13 @@ def main():
     # Initialize embedder
     embedder = XLMREmbedder()
     
-    # Process English AMR graphs
-    for split in ["train", "dev", "test"]:
-        process_directory(
-            embedder=embedder,
-            directory_path=Path(f"data/processed/amr_graphs_pyg/{split}"),
-            node_type="amr"
-        )
+    # Skip English AMR graphs (already embedded)
+    # for split in ["train", "dev", "test"]:
+    #     process_directory(
+    #         embedder=embedder,
+    #         directory_path=Path(f"data/processed/amr_graphs_pyg/{split}"),
+    #         node_type="amr"
+    #     )
         
     # Process multilingual target dependency graphs
     for lang in ["es", "de", "it", "zh"]:

@@ -35,6 +35,9 @@ def main():
     device = "cuda" if torch.cuda.is_available() and config["experiment"]["device"] == "cuda" else "cpu"
     logger.info(f"Using compute device: {device}")
     
+    from tqdm import tqdm
+    cache_in_ram = config["train"].get("cache_in_ram", True)
+    
     # 2. Load Datasets
     logger.info("Loading preprocessed graph datasets...")
     
@@ -44,6 +47,9 @@ def main():
         logger.error(f"English AMR preprocessed graphs not found at: {amr_dir}. Run scripts/02_preprocess_amr.py and 04_extract_embeddings.py first.")
         return
     amr_dataset = GraphDataset(str(amr_dir))
+    if cache_in_ram:
+        logger.info("Caching English AMR graphs in RAM for zero disk I/O...")
+        amr_dataset = [amr_dataset[i] for i in tqdm(range(len(amr_dataset)), desc="Caching AMR")]
     logger.info(f"Loaded {len(amr_dataset)} English AMR graphs.")
     
     # Multilingual target dependency datasets
@@ -53,7 +59,11 @@ def main():
         if not dep_dir.exists() or not list(dep_dir.glob("*.pt")):
             logger.warning(f"Dependency graphs for {lang} not found at: {dep_dir}. Skipping.")
             continue
-        tgt_datasets.append(GraphDataset(str(dep_dir)))
+        tgt_dataset = GraphDataset(str(dep_dir))
+        if cache_in_ram:
+            logger.info(f"Caching {lang} dependency graphs in RAM...")
+            tgt_dataset = [tgt_dataset[i] for i in tqdm(range(len(tgt_dataset)), desc=f"Caching {lang}")]
+        tgt_datasets.append(tgt_dataset)
         logger.info(f"Loaded {len(tgt_datasets[-1])} dependency graphs for language: {lang}")
         
     if not tgt_datasets:
