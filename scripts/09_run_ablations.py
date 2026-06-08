@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import yaml
 import sys
+import argparse
 from pathlib import Path
 
 print("Setting up logging...")
@@ -68,6 +69,10 @@ def run_script(script_name: str, args: list = None):
     subprocess.run(cmd, check=True)
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--exp_id", default=None, choices=list(ABLATIONS.keys()), help="Run only a specific experiment ID.")
+    args = parser.parse_args()
+
     base_config_path = Path("config/base_config.yaml")
     if not base_config_path.exists():
         logger.error(f"Base config not found at: {base_config_path}")
@@ -78,6 +83,16 @@ def main():
         
     # Run each ablation experiment
     for exp_id, overrides in ABLATIONS.items():
+        # If running a specific experiment, skip all others
+        if args.exp_id and exp_id != args.exp_id:
+            continue
+            
+        # Check if already completed
+        results_file = Path("experiments") / exp_id / "results" / "smatch_scores.json"
+        if results_file.exists():
+            logger.info(f"Ablation experiment {exp_id} is already completed. Skipping.")
+            continue
+            
         logger.info(f"==================================================")
         logger.info(f"STARTING ABLATION STUDY: {exp_id}")
         logger.info(f"==================================================")
@@ -102,20 +117,45 @@ def main():
         
         # 4. Sequentially run training, alignment, decoding, and evaluation
         try:
-            # Step 1: Train Graph Encoder
-            logger.info(f"[{exp_id}] Step 1/4: Training graph encoder...")
-            run_script("scripts/05_train_encoder.py")
+            # Determine if we can reuse checkpoints from exp_001_baseline_gw
+            # We can reuse if it uses the same GAT encoder backbone and cosine metric
+            can_reuse = (
+                overrides.get("encoder.conv_type", "gat") == "gat" and
+                overrides.get("alignment.metric", "cosine") == "cosine"
+            )
             
-            # Step 2: Run Fused Gromov-Wasserstein Alignment and projection mapping
-            logger.info(f"[{exp_id}] Step 2/4: Aligning embedding spaces...")
+            baseline_model_ckpt = Path("experiments/exp_001_baseline_gw/checkpoints/best_model.pt")
+            baseline_proj_ckpt = Path("experiments/exp_001_baseline_gw/checkpoints/projection.pt")
+            
+            checkpoints_dir = exp_dir / "checkpoints"
+            checkpoints_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Step 1: Train Graph Encoder or Copy Checkpoint
+            if can_reuse and baseline_model_ckpt.exists():
+                logger.info(f"[{exp_id}] Reusing GAT encoder checkpoint from baseline...")
+                shutil.copy(baseline_model_ckpt, checkpoints_dir / "best_model.pt")
+            else:
+                logger.info(f"[{exp_id}] Step 1/5: Training graph encoder...")
+                run_script("scripts/05_train_encoder.py")
+            
+            # Step 2: Train Projection Layer or Copy Checkpoint
+            if can_reuse and baseline_proj_ckpt.exists():
+                logger.info(f"[{exp_id}] Reusing projection layer checkpoint from baseline...")
+                shutil.copy(baseline_proj_ckpt, checkpoints_dir / "projection.pt")
+            else:
+                logger.info(f"[{exp_id}] Step 2/5: Training projection layer...")
+                run_script("scripts/05b_train_projection.py")
+            
+            # Step 3: Run Fused Gromov-Wasserstein Alignment and projection mapping
+            logger.info(f"[{exp_id}] Step 3/5: Aligning embedding spaces...")
             run_script("scripts/06_run_alignment.py")
             
-            # Step 3: Run AMR decoding using AMRBART
-            logger.info(f"[{exp_id}] Step 3/4: Decoding Penman AMRs...")
+            # Step 4: Run AMR decoding using AMRBART
+            logger.info(f"[{exp_id}] Step 4/5: Decoding Penman AMRs...")
             run_script("scripts/07_decode_amr.py")
             
-            # Step 4: Run Smatch evaluation
-            logger.info(f"[{exp_id}] Step 4/4: Evaluating Smatch scores...")
+            # Step 5: Run Smatch evaluation
+            logger.info(f"[{exp_id}] Step 5/5: Evaluating Smatch scores...")
             run_script("scripts/08_evaluate.py", args=["--exp_id", exp_id])
             
             logger.success(f"Ablation experiment {exp_id} completed successfully!")
