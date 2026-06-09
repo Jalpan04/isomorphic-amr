@@ -12,14 +12,12 @@
 
 \renewcommand{\UrlFont}{\ttfamily\small}
 
-% \aclfinalcopy % Uncomment this for the final submission if using the acl package
+\title{\textbf{Unsupervised Cross-Lingual Semantic Parsing via Isomorphic Graph Projection}}
 
-\title{Unsupervised Cross-Lingual Semantic Parsing via Isomorphic Graph Projection}
-
-\author{First Author \\
+\author{Jalpan Vyas \\
   Department of Computer Science \\
-  University Name \\
-  \texttt{author@email.edu} \\}
+  Isomorphic AMR Research Group \\
+  \texttt{vyasjalpan1202@gmail.com} \\}
 
 \date{}
 
@@ -27,53 +25,72 @@
 \maketitle
 
 \begin{abstract}
-Unsupervised semantic parsing maps target-language text to meaning representations like Abstract Meaning Representation (AMR) without requiring parallel corpora. Current methods heavily rely on machine translation systems or parallel text to align source syntax and target semantics. In this paper, we propose an unsupervised cross-lingual AMR parsing framework that maps target-language dependency graphs to English AMR graphs in a shared embedding space. We initialize node features with cross-lingual XLM-R embeddings, encode graph topology using a Graph Attention Network (GAT), and align target syntax and source semantics using a Fused Gromov-Wasserstein (FGW) optimal transport formulation. To decode the aligned representations, we train a linear projection layer via teacher forcing on English AMR 3.0 to project GAT node embeddings into a frozen pre-trained AMRBART decoder. Experimental evaluation on the Amazon MASSIVE-AMR dataset across Spanish, German, Italian, and Chinese reveals key bottlenecks in graph-to-sequence projection alignment. We analyze the causes of structural collapse and suggest multi-relational optimal transport and cross-attention mapping as mitigations.
+Cross-lingual semantic parsing to Abstract Meaning Representation (AMR) is typically constrained by the lack of parallel semantic annotations in target languages. Traditional approaches rely on machine translation (MT) pipelines or parallel corpora to bridge the language gap. In this paper, we propose a fully unsupervised cross-lingual AMR parsing framework based on isomorphic graph projections. We encode target syntactic dependency structures using a Graph Neural Network (GNN) and map them to a source English AMR semantic space using Fused Gromov-Wasserstein (FGW) optimal transport. The aligned graph representations are then decoded into Penman AMR text via a custom linear projection layer connected to a frozen, pre-trained AMRBART decoder. We evaluate our approach on the Amazon MASSIVE-AMR dataset across Spanish, German, Italian, and Chinese. Our results reveal a critical bottleneck: the linear projection interface fails to preserve valid Penman syntax, causing a structural collapse where all GNN backbones and alignment variants regress to a baseline F1 score of 0.1425. We analyze these technical bottlenecks and propose cross-attention architectures and multi-relational optimal transport as future directions.
 \end{abstract}
 
 \section{Introduction}
-Semantic parsing—the task of mapping natural language utterances into structured semantic representations such as Abstract Meaning Representation (AMR) \cite{banarescu-etal-2013-abstract}—is a core task in natural language processing. However, training state-of-the-art semantic parsers requires large amounts of human-annotated data, which only exists at scale for English. Consequently, parsing in other languages has historically relied on cross-lingual transfer, using either parallel text or machine translation (MT) systems.
+Abstract Meaning Representation (AMR) \cite{banarescu-etal-2013-abstract} captures the semantic core of natural language sentences by representing them as directed, non-projective, acyclic graphs. Nodes represent semantic concepts, and edges represent relations. While AMR parsing has reached high performance in English due to datasets like AMR 3.0, annotation scarcity in other languages remains a major obstacle for global deployment.
 
-To bypass the requirement of parallel corpora, we propose a fully unsupervised cross-lingual AMR parsing framework based on isomorphic graph projections. We exploit the structural similarities between target-language syntactic dependency trees and universal semantic AMR graphs. By encoding graph topology in a shared cross-lingual embedding space (XLM-R), we formulate the projection as an unsupervised optimal transport problem. We solve this matching problem using the Fused Gromov-Wasserstein (FGW) distance \cite{titouan2019sliced}, which simultaneously aligns node semantics and graph topologies.
+To address this, cross-lingual transfer methodologies are widely used. These typically fall into Translate-then-Parse (T+P) pipelines—which translate target text into English before running an English parser—or annotation projection methods that require parallel corpora. However, MT systems introduce translation artifacts, and parallel datasets are expensive to construct.
 
-Finally, we decode the aligned representations by passing the projected GAT node embeddings into a pre-trained, frozen AMRBART sequence-to-sequence decoder \cite{bai-etal-2022-graph} via a custom-trained linear projection layer. We evaluate our framework on the Amazon MASSIVE-AMR dataset \cite{fitzgerald-etal-2022-massive} across Spanish, German, Italian, and Chinese. Our baseline evaluation reveals systematic bottlenecks in graph-to-sequence mapping, providing a clear mathematical and empirical challenge for unsupervised semantic transfer.
+In this work, we investigate a fully unsupervised approach that leverages the structural isomorphism between target syntactic dependency trees and universal semantic AMR graphs. We propose a framework that initializes node concepts with cross-lingual XLM-RoBERTa (XLM-R) embeddings, encodes graph topologies using Graph Neural Networks, and solves the mapping using a Fused Gromov-Wasserstein (FGW) optimal transport alignment. The aligned embeddings are projected into the input space of a frozen pre-trained AMRBART decoder to produce the target AMR graph in Penman notation.
+
+We evaluate this framework on the Amazon MASSIVE-AMR benchmark. Through systematic ablation studies across Spanish, German, Italian, and Chinese, we characterize the performance of Graph Attention Network (GAT) vs. Graph Convolutional Network (GCN) backbones, Cosine vs. Euclidean optimal transport metrics, and FGW vs. Orthogonal Procrustes alignment. We discuss the structural collapse encountered and provide architectural paths toward robust unsupervised graph-to-sequence translation.
 
 \section{Methodology}
-Our framework consists of four main phases: node embedding initialization, graph encoding, optimal transport alignment, and sequence decoding.
+Our pipeline consists of: (1) Graph initialization and encoding, (2) Fused Gromov-Wasserstein alignment, and (3) Linear projection and AMRBART decoding.
 
-\subsection{Node Initialization and Graph Encoding}
-Given a target-language sentence, we parse it into a dependency tree using Stanza \cite{qi-etal-2020-stanza}. Each node $i$ represents a word token, initialized with contextualized embeddings $x_i \in \mathbb{R}^{768}$ from a frozen XLM-RoBERTa (XLM-R) encoder \cite{conneau-etal-2020-unsupervised}. We construct a PyTorch Geometric graph representation where edges represent dependency relations.
+\subsection{Syntactic Graph Encoding}
+Given a target-language sentence, we parse it into a dependency tree using Stanza \cite{qi-etal-2020-stanza}. Each word token is represented as a node $i$, initialized with contextualized features $x_i \in \mathbb{R}^{768}$ from a frozen XLM-R encoder \cite{conneau-etal-2020-unsupervised}. We construct a graph where edges represent dependency arcs.
 
-To encode graph topology, we pass the node features and dependency edges through a Graph Attention Network (GAT) \cite{velickovic2018graph} to obtain dense graph embeddings:
+To encode graph topology, we evaluate two GNN architectures. The default is a Graph Attention Network (GAT) \cite{velickovic2018graph}:
 \begin{equation}
-h_i^{(l+1)} = \sigma \left( \sum_{j \in \mathcal{N}(i)} \alpha_{ij} W h_j^{(l)} \right)
+h_i^{(l+1)} = \sigma \left( \sum_{j \in \mathcal{N}(i)} \alpha_{ij} W_a h_j^{(l)} \right)
 \end{equation}
-where $\alpha_{ij}$ are self-attention coefficients and $W$ is a parameter matrix.
+where $\alpha_{ij}$ are attention coefficients computed over local neighborhoods, and $W_a$ is a learnable projection matrix. As an ablation backbone, we evaluate a standard Graph Convolutional Network (GCN) \cite{kipf2016semi}:
+\begin{equation}
+h_i^{(l+1)} = \sigma \left( \sum_{j \in \mathcal{N}(i)} \frac{1}{\sqrt{\tilde{d}_i \tilde{d}_j}} W_c h_j^{(l)} \right)
+\end{equation}
+where $\tilde{d}_i$ denotes node degrees under self-looped adjacency.
 
 \subsection{Fused Gromov-Wasserstein Alignment}
-Let $G_s = (V_s, E_s)$ be the source English AMR graph, and $G_t = (V_t, E_t)$ be the target-language dependency graph. We compute intra-graph distance matrices $C^s \in \mathbb{R}^{|V_s| \times |V_s|}$ and $C^t \in \mathbb{R}^{|V_t| \times |V_t|}$ representing the shortest-path geodesic distances within each graph.
+Let $G_s = (V_s, E_s)$ represent the source English AMR graph, and $G_t = (V_t, E_t)$ represent the target syntactic dependency tree. We compute intra-graph distance matrices $C^s \in \mathbb{R}^{|V_s| \times |V_s|}$ and $C^t \in \mathbb{R}^{|V_t| \times |V_t|}$ using shortest-path geodesic distance metrics.
 
-We formulate the structural alignment as a Fused Gromov-Wasserstein (FGW) optimal transport problem:
+We formulate the mapping as a Fused Gromov-Wasserstein (FGW) optimal transport problem \cite{titouan2019sliced}, solving for a coupling matrix $T \in \mathbb{R}^{|V_t| \times |V_s|}$:
 \begin{equation}
 \min_{T \in \Pi(\mu, \nu)} (1-\alpha) \langle T, M \rangle + \alpha \mathcal{E}_{C^s, C^t}(T)
 \end{equation}
-where $M$ is the node-level semantic distance matrix computed from XLM-R embeddings, $T$ is the transport plan coupling the nodes, $\alpha \in [0, 1]$ balances node semantics against topological structures, and $\mathcal{E}$ is the Gromov-Wasserstein structural cost:
+where $M$ is the node-level semantic distance matrix (computed via Cosine or Euclidean distance of XLM-R embeddings), and $\mathcal{E}$ is the topological cost:
 \begin{equation}
 \mathcal{E}_{C^s, C^t}(T) = \sum_{i,j,k,l} |C^s_{ik} - C^t_{jl}|^2 T_{ij} T_{kl}
 \end{equation}
-The resulting coupling matrix $T$ acts as the projection mapping target nodes to the English AMR concept space.
-
-\subsection{Linear Projection and AMRBART Decoding}
-To interface GAT node embeddings (256-dim) with the AMRBART sequence decoder (1024-dim), we train a linear projection layer $W_p \in \mathbb{R}^{256 \times 1024}$ via teacher forcing on the English AMR 3.0 dataset (`hoshuhan/amr-3-parsed`). GAT embeddings of English AMR nodes are projected to the BART space:
+Here, $\alpha \in [0, 1]$ balances semantic similarity against topological structure. The optimal transport plan $T$ is used to project target node features into the English AMR space:
 \begin{equation}
-z_i = W_p h_i
+h_i^{proj} = \sum_{j} T_{ij} h_j^{source}
 \end{equation}
-The projected sequence of embeddings is fed directly into the frozen AMRBART decoder to generate the linearized Penman AMR string.
+
+\subsection{Linear Decoder Interface}
+To map the aligned graph embeddings (256-dim) to the input dimension of a frozen AMRBART sequence-to-sequence model \cite{bai-etal-2022-graph} (1024-dim), we train a linear projection layer $W_p \in \mathbb{R}^{256 \times 1024}$. 
+We train $W_p$ via teacher forcing on the English AMR 3.0 dataset (`hoshuhan/amr-3-parsed`) using cross-entropy loss to reconstruct linearized AMR strings:
+\begin{equation}
+z_i = W_p h_i^{proj}
+\end{equation}
+The sequence of projected vectors $z$ is fed directly into the BART decoder as prefix context to generate the target Penman AMR graph.
 
 \section{Experimental Setup}
-We evaluate our pipeline on the Amazon MASSIVE-AMR dataset. The GAT encoder is trained using a joint Graph Autoencoder (GAE) adjacency reconstruction loss and an unsupervised batch-level FGW alignment loss. The projection layer is trained for 3 epochs with a batch size of 8 and 300 steps per epoch. During testing, the projected target language graph embeddings are fed into the AMRBART decoder with beam search (beam size = 5).
+\subsection{Datasets}
+We evaluate our model on the Amazon MASSIVE-AMR test split \cite{fitzgerald-etal-2022-massive}, which contains 288 parallel evaluation utterances across Spanish (es), German (de), Italian (it), and Chinese (zh). 
 
-\section{Experimental Results}
-We report the cross-lingual transfer Smatch F1 scores comparing our model to baseline methods in Table~\ref{tab:main_results}. Furthermore, we present ablation studies examining alternative graph backbones (GCN vs. GAT), alignment metrics (Euclidean vs. Cosine), and alignment mappings (Procrustes vs. FGW) in Table~\ref{tab:ablation}.
+\subsection{Training & Hyperparameters}
+The GNN encoder is trained using a joint Graph Autoencoder (GAE) reconstruction loss and batch-level FGW alignment loss. The projection layer $W_p$ is trained for 3 epochs with a batch size of 8, a learning rate of $0.001$, and 300 steps per epoch. All computations are accelerated using an NVIDIA GPU with PyTorch CUDA. Decoding is performed one-by-one to support variable graph sizes, using beam search with a beam size of 5 and a maximum sequence length of 256.
+
+\subsection{Baseline Methods}
+We compare our model against:
+\begin{itemize}
+\item \textbf{Random Projection:} An ablation baseline where the projection mapping is initialized as a random orthogonal matrix.
+\item \textbf{XL-AMR \cite{blloshmi-etal-2020-xl}:} A supervised cross-lingual parser trained on parallel corpora.
+\item \textbf{Translate-then-Parse (T+P):} A test-time machine translation baseline where sentences are translated to English and parsed using an English AMRBART model.
+\end{itemize}
 
 \begin{table*}[t]
 \centering
@@ -107,17 +124,34 @@ Euclidean Dist in GW & 14.0 & 14.0 & 14.0 & 15.0 & 14.2 \\
 \label{tab:ablation}
 \end{table}
 
-\section{Technical Gaps and Discussion}
-The baseline Smatch F1 score of 0.1425 reveals severe bottlenecks in the current mapping architecture. Our analysis points to three critical technical challenges:
+\section{Experimental Results}
+Our main comparative results are summarized in Table~\ref{tab:main_results}. The ablation results across different model configurations are detailed in Table~\ref{tab:ablation}.
 
-\paragraph{Syntax-Semantics Topology Non-Isomorphism}
-FGW optimal transport assumes topological isomorphism between dependency trees and AMR graphs. However, dependency trees contain auxiliary syntactic tokens (e.g., prepositions, determiners) that have no counterpart in semantic AMR graphs. This structural discrepancy introduces topological noise during the projection phase.
+We observe that all variations of our alignment model, including GAT vs. GCN backbones, Cosine vs. Euclidean distance metrics, and Fused Gromov-Wasserstein vs. Orthogonal Procrustes alignment, converge to the exact same F1 scores (es: 14.0, de: 14.0, it: 14.0, zh: 15.0; average 14.2). Strikingly, this is identical to the performance of the Random Projection baseline. We investigate the underlying causes of this phenomenon in Section~\ref{sec:discussion}.
 
-\paragraph{Linear Projection Bottleneck}
-Mapping GAT node representations to BART sequence space via a single linear layer assumes a linear alignment between structural graph features and sequential text embeddings. This leads to invalid generated sequences that fail Penman parsing, resulting in high rates of empty fallback graphs.
+\section{Technical Gaps & Discussion}
+\label{sec:discussion}
+The convergence of all configurations to a Smatch F1 score of 0.1425 reveals severe representation and interface bottlenecks:
 
-\paragraph{Target Latent Space Collapse}
-Our analysis shows that the predicted target language graph embeddings collapse to a small set of identical default semantic structures. This suggests a representation collapse in the projection mapping, where multiple distinct target sentences are mapped to the same frozen AMRBART prefix vector, yielding identical empty skeleton outputs.
+\subsection{Syntax-Semantics Topology Non-Isomorphism}
+Optimal transport alignment via Fused Gromov-Wasserstein assumes structural isomorphism between the source (AMR) and target (dependency) graphs. However, dependency trees contain syntactic structural units (prepositions, determiners, auxiliary verbs) that do not map to semantic concepts in AMR. This topological mismatch degrades the optimization plan, injecting noise into the projected embeddings.
+
+\subsection{The Linear Projection Bottleneck}
+The primary bottleneck lies in the interface between the graph encoder and the sequence decoder. The single linear projection layer $W_p$ is insufficient to translate permutation-invariant graph embeddings into the strict, sequential, bracket-enclosed syntax of Penman notation. When presented with projected representations, the pre-trained AMRBART decoder experiences generation breakdown. The model outputs long, repetitive, or corrupt token sequences that fail Penman parsing. The layout validator catches these parsing exceptions and falls back to a default empty AMR graph structure, `(a / amr-empty)`. This empty graph possesses a baseline Smatch score of 0.1400 (0.1500 for Chinese due to tokenization differences), explaining the score convergence.
+
+\subsection{Target Latent Space Collapse}
+We analyze the matched English AMR templates during retrieval. Our analysis reveals a severe representation collapse in the latent space, where multiple distinct target dependency graphs retrieve the same small set of English templates (e.g., matching only 94 unique templates out of 1,000 for Spanish, and 141 for Chinese). This indicates that the GNN representations collapse to a localized sub-space during alignment, preventing the decoder from distinguishing target-language semantic nuances.
+
+\section{Future Work}
+To resolve the bottlenecks identified, we propose three primary directions:
+\begin{enumerate}
+\item \textbf{Cross-Attention Graph-to-Sequence Mapping:} Instead of a frozen decoder with a linear projection prefix, future architectures should employ trainable cross-attention layers to dynamically query the GNN node representations, bypassing the sequential prefix bottleneck.
+\item \textbf{Multi-Relational Optimal Transport:} Extending the Gromov-Wasserstein formulation to multi-relational graphs will enable aligning specific dependency roles (e.g., `nsubj`, `dobj`) with corresponding AMR relation slots (e.g., `:ARG0`, `:ARG1`).
+\item \textbf{Syntax Filtering:} Pre-filtering target dependency graphs to remove non-semantic function words will improve graph isomorphism and the resulting optimal transport plan.
+\end{enumerate}
+
+\section{Conclusion}
+In this paper, we proposed and evaluated an unsupervised cross-lingual AMR parsing pipeline using Fused Gromov-Wasserstein graph projections. Through systematic experiments across Spanish, German, Italian, and Chinese, we identified key limitations in linear graph-to-sequence interfaces, demonstrating that representation collapse and syntactic parsing failures limit performance to a baseline F1 floor of 0.1425. Our findings suggest that future unsupervised transfer research must transition toward cross-attention mappings and role-specific optimal transport to achieve robust semantic parsing.
 
 \begin{thebibliography}{9}
 \bibitem{banarescu-etal-2013-abstract}
@@ -128,6 +162,11 @@ Laura Banarescu, Claire Bonial, Shu Cai, Madalina Georgescu, Kira Griffitt, Ulf 
 \bibitem{velickovic2018graph}
 Petar Veli\v{c}kovi\'{c}, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Li\`{o}, and Yoshua Bengio. 2018.
 \newblock Graph Attention Networks.
+\newblock In \emph{International Conference on Learning Representations}.
+
+\bibitem{kipf2016semi}
+Thomas N. Kipf and Max Welling. 2016.
+\newblock Semi-Supervised Classification with Graph Convolutional Networks.
 \newblock In \emph{International Conference on Learning Representations}.
 
 \bibitem{titouan2019sliced}
@@ -154,6 +193,11 @@ Peng Qi, Yuhao Zhang, Yuhui Zhang, Jason Bolton, and Christopher D. Manning. 202
 Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzm{\'a}n, Edouard Grave, Myle Ott, Luke Zettlemoyer, and Veselin Stoyanov. 2020.
 \newblock Unsupervised Cross-lingual Representation Learning at Scale.
 \newblock In \emph{Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics}, pages 8440--8451.
+
+\bibitem{blloshmi-etal-2020-xl}
+Rexhina Blloshmi, Rocco Tripodi, and Roberto Navigli. 2020.
+\newblock XL-AMR: Enabling Cross-Lingual AMR Parsing with Few Resources.
+\newblock In \emph{Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing}, pages 7684--7695.
 \end{thebibliography}
 
 \end{document}
