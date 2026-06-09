@@ -38,7 +38,14 @@ In this work, we investigate a fully unsupervised approach that leverages the st
 We evaluate this framework on the Amazon MASSIVE-AMR benchmark. Through systematic ablation studies across Spanish, German, Italian, and Chinese, we characterize the performance of Graph Attention Network (GAT) vs. Graph Convolutional Network (GCN) backbones, Cosine vs. Euclidean optimal transport metrics, and FGW vs. Orthogonal Procrustes alignment. We discuss the structural collapse encountered and provide architectural paths toward robust unsupervised graph-to-sequence translation.
 
 \section{Methodology}
-Our pipeline consists of: (1) Graph initialization and encoding, (2) Fused Gromov-Wasserstein alignment, and (3) Linear projection and AMRBART decoding.
+Our framework consists of: (1) Graph initialization and encoding, (2) Fused Gromov-Wasserstein alignment, and (3) Linear projection and AMRBART decoding. The system pipeline is illustrated in Figure~\ref{fig:pipeline}.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=1.8\columnwidth]{figures/pipeline.png}
+\caption{System architecture of the unsupervised cross-lingual semantic parsing framework via isomorphic graph projection.}
+\label{fig:pipeline}
+\end{figure*}
 
 \subsection{Syntactic Graph Encoding}
 Given a target-language sentence, we parse it into a dependency tree using Stanza \cite{qi-etal-2020-stanza}. Each word token is represented as a node $i$, initialized with contextualized features $x_i \in \mathbb{R}^{768}$ from a frozen XLM-R encoder \cite{conneau-etal-2020-unsupervised}. We construct a graph where edges represent dependency arcs.
@@ -140,7 +147,14 @@ Optimal transport alignment via Fused Gromov-Wasserstein assumes structural isom
 The primary bottleneck lies in the interface between the graph encoder and the sequence decoder. The single linear projection layer $W_p$ is insufficient to translate permutation-invariant graph embeddings into the strict, sequential, bracket-enclosed syntax of Penman notation. When presented with projected representations, the pre-trained AMRBART decoder experiences generation breakdown. The model outputs long, repetitive, or corrupt token sequences that fail Penman parsing. The layout validator catches these parsing exceptions and falls back to a default empty AMR graph structure, `(a / amr-empty)`. This empty graph possesses a baseline Smatch score of 0.1400 (0.1500 for Chinese due to tokenization differences), explaining the score convergence.
 
 \subsection{Target Latent Space Collapse}
-We analyze the matched English AMR templates during retrieval. Our analysis reveals a severe representation collapse in the latent space, where multiple distinct target dependency graphs retrieve the same small set of English templates (e.g., matching only 94 unique templates out of 1,000 for Spanish, and 141 for Chinese). This indicates that the GNN representations collapse to a localized sub-space during alignment, preventing the decoder from distinguishing target-language semantic nuances.
+We analyze the matched English AMR templates during retrieval. Our analysis reveals a severe representation collapse in the latent space, where multiple distinct target dependency graphs retrieve the same small set of English templates (e.g., matching only 94 unique templates out of 1,000 for Spanish, and 141 for Chinese). This indicates that the GNN representations collapse to a localized sub-space during alignment, preventing the decoder from distinguishing target-language semantic nuances. We visualize this matching frequency distribution across languages in Figure~\ref{fig:collapse}.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figures/latent_space_collapse.png}
+\caption{Distribution of matched English AMR template indices, illustrating representation collapse across Spanish, German, Italian, and Chinese.}
+\label{fig:collapse}
+\end{figure}
 
 \section{Future Work}
 To resolve the bottlenecks identified, we propose three primary directions:
