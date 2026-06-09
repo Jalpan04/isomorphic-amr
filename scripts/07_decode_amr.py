@@ -18,8 +18,8 @@ print("All libraries loaded successfully. Starting execution...")
 
 def validate_and_format_amr(amr_str: str) -> str:
     """
-    Validates the generated AMR string. If valid Penman format, returns it as
-    a single-line representation. Otherwise, falls back to a dummy empty AMR.
+    Validates the generated AMR string. If valid Penman format AND valid Smatch format,
+    returns it as a single-line representation. Otherwise, falls back to a dummy empty AMR.
     """
     import penman
     clean_str = amr_str.strip()
@@ -27,7 +27,10 @@ def validate_and_format_amr(amr_str: str) -> str:
         g = penman.decode(clean_str)
         one_line = penman.encode(g).replace("\n", " ").strip()
         if one_line.startswith("(") and one_line.endswith(")"):
-            return one_line
+            import smatch
+            res = smatch.amr.AMR.parse_AMR_line(one_line)
+            if res is not None:
+                return one_line
     except Exception:
         pass
     return "(a / amr-empty)"

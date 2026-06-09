@@ -4,19 +4,22 @@ from loguru import logger
 import penman
 
 LANGUAGES = ["es", "de", "it", "zh"]
-EXP_ID = "exp_001_baseline_gw"
+EXP_ID = "exp_006_random_proj"
 
 def validate_and_format_amr(amr_str: str) -> str:
     """
-    Validates the generated AMR string. If valid Penman format, returns it as
-    a single-line representation. Otherwise, falls back to a dummy empty AMR.
+    Validates the generated AMR string. If valid Penman format AND valid Smatch format,
+    returns it as a single-line representation. Otherwise, falls back to a dummy empty AMR.
     """
     clean_str = amr_str.strip()
     try:
         g = penman.decode(clean_str)
         one_line = penman.encode(g).replace("\n", " ").strip()
         if one_line.startswith("(") and one_line.endswith(")"):
-            return one_line
+            import smatch
+            res = smatch.amr.AMR.parse_AMR_line(one_line)
+            if res is not None:
+                return one_line
     except Exception:
         pass
     return "(a / amr-empty)"
@@ -51,12 +54,12 @@ def main():
             cleaned = validate_and_format_amr(block)
             repaired_blocks.append(cleaned)
             
-        # Ensure we write exactly 300 graphs
-        if len(repaired_blocks) != 300:
-            logger.warning(f"Expected 300 graphs, but found {len(repaired_blocks)} blocks in {pred_file.name}. Adjusting...")
-            while len(repaired_blocks) < 300:
+        # Ensure we write exactly 288 graphs
+        if len(repaired_blocks) != 288:
+            logger.warning(f"Expected 288 graphs, but found {len(repaired_blocks)} blocks in {pred_file.name}. Adjusting...")
+            while len(repaired_blocks) < 288:
                 repaired_blocks.append("(a / amr-empty)")
-            repaired_blocks = repaired_blocks[:300]
+            repaired_blocks = repaired_blocks[:288]
             
         # Write back to predicted AMR file
         with open(pred_file, "w", encoding="utf-8") as f:
