@@ -42,7 +42,7 @@ Our framework consists of: (1) Graph initialization and encoding, (2) Fused Grom
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=1.8\columnwidth]{figures/pipeline.png}
+\includegraphics[width=\textwidth,height=8cm,keepaspectratio]{figures/pipeline.png}
 \caption{System architecture of the unsupervised cross-lingual semantic parsing framework via isomorphic graph projection.}
 \label{fig:pipeline}
 \end{figure*}
@@ -88,7 +88,7 @@ The sequence of projected vectors $z$ is fed directly into the BART decoder as p
 \subsection{Datasets}
 We evaluate our model on the Amazon MASSIVE-AMR test split \cite{fitzgerald-etal-2022-massive}, which contains 288 parallel evaluation utterances across Spanish (es), German (de), Italian (it), and Chinese (zh). 
 
-\subsection{Training & Hyperparameters}
+\subsection{Training \& Hyperparameters}
 The GNN encoder is trained using a joint Graph Autoencoder (GAE) reconstruction loss and batch-level FGW alignment loss. The projection layer $W_p$ is trained for 3 epochs with a batch size of 8, a learning rate of $0.001$, and 300 steps per epoch. All computations are accelerated using an NVIDIA GPU with PyTorch CUDA. Decoding is performed one-by-one to support variable graph sizes, using beam search with a beam size of 5 and a maximum sequence length of 256.
 
 \subsection{Baseline Methods}
@@ -136,7 +136,7 @@ Our main comparative results are summarized in Table~\ref{tab:main_results}. The
 
 We observe that all variations of our alignment model, including GAT vs. GCN backbones, Cosine vs. Euclidean distance metrics, and Fused Gromov-Wasserstein vs. Orthogonal Procrustes alignment, converge to the exact same F1 scores (es: 14.0, de: 14.0, it: 14.0, zh: 15.0; average 14.2). Strikingly, this is identical to the performance of the Random Projection baseline. We investigate the underlying causes of this phenomenon in Section~\ref{sec:discussion}.
 
-\section{Technical Gaps & Discussion}
+\section{Technical Gaps \& Discussion}
 \label{sec:discussion}
 The convergence of all configurations to a Smatch F1 score of 0.1425 reveals severe representation and interface bottlenecks:
 
@@ -151,7 +151,7 @@ We analyze the matched English AMR templates during retrieval. Our analysis reve
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\columnwidth]{figures/latent_space_collapse.png}
+\includegraphics[width=\columnwidth,height=6.5cm,keepaspectratio]{figures/latent_space_collapse.png}
 \caption{Distribution of matched English AMR template indices, illustrating representation collapse across Spanish, German, Italian, and Chinese.}
 \label{fig:collapse}
 \end{figure}
